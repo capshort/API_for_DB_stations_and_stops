@@ -1,14 +1,15 @@
 #!/usr/bin/env python
 
-from flask import Flask
+from flask import Flask, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from pandas import read_csv
-from sys import argv, exit
+from sys import argv
 
 # initialise the flask webserver and the SQLAlchemy database depending on it
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////tmp/stations.sqlite'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = { 'encoding': 'utf-8' }
 db = SQLAlchemy(app)
 
 class Station(db.Model):
@@ -19,7 +20,7 @@ class Station(db.Model):
     typ_kurz = db.Column(db.String(5), nullable=False)
     typ_lang = db.Column(db.String(5), nullable=False)
     betriebszustand = db.Column(db.String(20), )
-    ab_datum = db.Column(db.Date, nullable=False) # TODO implement a converter from format "20220128" to "2022-01-28" which is used in SQL
+    ab_datum = db.Column(db.Date, nullable=False)
     bis_datum = db.Column(db.Date)
     niederlassung = db.Column(db.Integer, nullable=False)
     regionalbereich = db.Column(db.String(80), nullable=False)
@@ -31,25 +32,22 @@ class Station(db.Model):
         del result['_sa_instance_state']
         return result
 
-@app.get('/betriebsstelle/<string:identifier>')
-def get_station(identifier):
-    # identifier may be one of: plc, rl100_code, rl100_langname, rl100_kurzname
-    # and if it is a rl100_code it may be lower or upper case (the db stores them upper cased)
-    result = Station.query.filter_by(rl100_code=identifier.upper()).all()
-    if len(result) > 0:
-        return jsonify(result[0].serialise()), 200
-    for query_column in [ plc, rl100_langname, rl100_kurzname ]:
-        result = Station.query.filter_by(query_column=identifier)
-        if len(result) > 0:
-            return jsonify(result[0].serialise()), 200
+# handle http get requests on /betriebsstelle/<rl100code>
+@app.get('/betriebsstelle/<string:rl100code>')
+def get_station(rl100code):
+    result = Station.query.get(rl100code.upper())
+    if not result is None:
+        return jsonify(result.serialise()), 200
     return {"Fehler": "Angefragte Betriebsstelle existiert nicht"}, 406
 
 if __name__ == '__main__':
-    # determine csv input file & ensure that the database initially contains exactly that file's entries
     csv_file = argv[1] if len(sys.argv) > 1 else './DBNetz-Betriebsstellenverzeichnis-Stand2021-10.csv'
     # TODO test whether the csv file exists (first version of that did not work)
     db.drop_all()
-    read_csv(csv_file, sep=";").to_sql(Station.__tablename__, db.engine, index=False)
-    
+    # this variable serves to tell panda's read_csv how to name the columns when inserting into the database
+    # adjustments must be done consistently with the attributes in the Station class, otherwise queries will not work as expected
+    column_names = [ "plc", "rl100_code", "rl100_langname", "rl100_kurzname", "typ_kurz", "typ_lang", "betriebszustand", "ab_datum", "bis_datum", "niederlassung", "regionalbereich", "letzte_aenderung" ]
+    # read the data from csv file and insert them into the database
+    read_csv(csv_file, sep=";", header=0, names=column_names, parse_dates=[ "ab_datum", "bis_datum", "letzte_aenderung" ]).to_sql(Station.__tablename__, db.engine, index=False)
     # start the server
     app.run(host='0.0.0.0', port=8080)
