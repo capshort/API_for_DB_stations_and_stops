@@ -9,4 +9,4 @@ The code for this project was written on a NixOS system and uses Nix to resolve 
 After that, the server will be running on 0.0.0.0:8080 and you may send local requests e.g. via
 
     $ curl 127.0.0.1:8080/betriebsstelle/xxxxx
-where `xxxxx` is a RL100 Code, e.g. AAMP for H_a_mburg _A_nckel_m_anns_p_latz. 
+where `xxxxx` is a RL100 Code, e.g. AAMP for H**a**mburg **A**nckel**m**anns**p**latz. 
